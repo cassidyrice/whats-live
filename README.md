@@ -58,6 +58,12 @@ matches whether or not your deploy landed.
 git show --stat --name-only <commit>   # candidates
 ```
 
+**A probe has to be a file your server returns byte-for-byte.** Static assets —
+anything under `public/`, `static/`, or your build output — work. Source files
+that get compiled on the way out (a `.tsx` page, a `.scss` file) do not: the repo
+bytes and the served bytes were never meant to match. If a commit only touched
+compiled sources, use `HEADER_PROBES`, or deploy a tiny marker file next time.
+
 Two or three is plenty. Good ones: an image or asset added in that commit, a page
 whose text changed, a `.well-known` file. Each probe carries a plain sentence
 saying what a real person loses when it fails:
