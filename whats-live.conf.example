@@ -1,0 +1,27 @@
+# whats-live config. Copy to whats-live.conf and edit.
+
+SITE_ORIGIN="https://example.com"   # the live site, no trailing slash
+DEPLOY_BRANCH="main"                # label only, for the summary line
+DEPLOY_COMMIT="0000000"             # the commit you believe is live (full sha is safer)
+GIT_REPO="."                        # the checkout that contains that commit
+
+# FILE PROBES —  url path | path in the repo | what breaks if this fails
+#
+# Pick files that CHANGED in the commit you deployed. A file that has been the
+# same for a year proves nothing: it matches whether or not your deploy landed.
+# Two or three is plenty. Find candidates with:
+#
+#   git show --stat --name-only <commit>
+#
+PROBES=(
+  "/og/home.png|public/og/home.png|Shared links show the old preview image"
+  "/pricing|app/pricing/page.html|Customers see last month's prices"
+)
+
+# HEADER PROBES —  url path | header | expected text | what breaks if this fails
+#
+# For things that ship with the build but never show up as a file: redirects,
+# security headers, cache rules. Optional — delete this block if unused.
+HEADER_PROBES=(
+  "/checkout|permissions-policy|payment=(self)|Apple Pay and Google Pay stop working"
+)
