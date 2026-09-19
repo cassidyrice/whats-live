@@ -100,6 +100,9 @@ url_for() {
 
 candidates=()
 seen=""
+list="$(mktemp)"
+trap 'rm -f "$list"' EXIT
+git --no-pager -C "$repo" diff-tree -r --root --no-commit-id --name-only --diff-filter=ACMR -z "$commit" >"$list"
 while IFS= read -r -d '' path; do
   [[ -n "$path" ]] || continue
   case "$seen" in
@@ -108,14 +111,17 @@ while IFS= read -r -d '' path; do
   qualifies "$path" || continue
   seen="${seen}|${path}|"
   candidates+=("$(score_for "$path")"$'\t'"$(printf '%05d' "${#path}")"$'\t'"$path")
-done < <(git -C "$repo" diff-tree -r --root -m --no-commit-id --name-only --diff-filter=ACMR -z "$commit")
+done <"$list"
 
 if [[ ${#candidates[@]} -eq 0 ]]; then
   short="$(git -C "$repo" rev-parse --short "$commit")"
   echo "No file changed in ${short} can be probed byte-for-byte."
   echo "Need a static file this commit changed under public/, static/, or dist/."
   echo "Compiled sources (.tsx .jsx .ts .scss .vue .svelte) do not qualify."
-  echo "Use HEADER_PROBES instead (see whats-live.conf.example)."
+  echo "Header probes never read the commit, so they cannot prove which build is"
+  echo "live. Bake the sha into a public file at build time instead:"
+  echo '  echo "$CF_PAGES_COMMIT_SHA" > public/build.txt   # VERCEL_GIT_COMMIT_SHA / COMMIT_REF'
+  echo "then probe /build.txt. It changes on every deploy by definition."
   exit 1
 fi
 
@@ -123,7 +129,9 @@ echo "PROBES=("
 n=0
 TAB=$'\t'
 while IFS= read -r path; do
-  [[ "$n" -ge 3 ]] && break
+  if [[ "$n" -ge 3 ]]; then
+    break
+  fi
   printf '  "%s|%s|TODO"\n' "$(url_for "$path")" "$path"
   n=$((n + 1))
 done < <(printf '%s\n' "${candidates[@]}" | sort -t "$TAB" -k1,1nr -k2,2nr -k3,3 | cut -f3-)
