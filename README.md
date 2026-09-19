@@ -24,17 +24,17 @@ $ ./whats-live.sh
 MISMATCH: the site is NOT serving 999dfe6.
 ```
 
-## It tells you one of four things
+## It tells you one of three things
 
 | | means | do |
 |---|---|---|
-| `OK` (exit 0) | the recorded commit is live | nothing |
-| `MISMATCH` (exit 1) | an older or unexpected build is live, **and what that costs you** | find out which deploy didn't land |
-| `INCONCLUSIVE` (exit 2) | couldn't reach the site | check your network — this is not a deploy problem |
-| `commit not in this repo` (exit 2) | your record is stale or you're in the wrong checkout | fix the config |
+| `OK` (exit 0) | every probe matched the recorded commit | nothing |
+| `MISMATCH` (exit 1) | the site answered, and what it served is not what that commit holds — plus a `BREAKS` line for every probe you wrote one for | find out which deploy didn't land |
+| `INCONCLUSIVE` (exit 2) | it could not decide: site unreachable, commit not in your checkout, config wrong or empty, or `curl`/`git` missing | read the line it printed; only the first is a network problem |
 
-The third one matters more than it looks. Without it you roll back a deploy that
-was fine, because your wifi dropped.
+Exit 2 matters more than it looks. Without it you roll back a deploy that was
+fine, because your wifi dropped. A dropped connection is never reported as a bad
+deploy — there is a test for exactly that.
 
 ## Install
 
@@ -62,7 +62,8 @@ git show --stat --name-only <commit>   # candidates
 anything under `public/`, `static/`, or your build output — work. Source files
 that get compiled on the way out (a `.tsx` page, a `.scss` file) do not: the repo
 bytes and the served bytes were never meant to match. If a commit only touched
-compiled sources, use `HEADER_PROBES`, or deploy a tiny marker file next time.
+compiled sources there is nothing here to probe — deploy a tiny marker file next
+time (a `build.txt` holding the commit sha does it).
 
 Two or three is plenty. Good ones: an image or asset added in that commit, a page
 whose text changed, a `.well-known` file. Each probe carries a plain sentence
@@ -77,8 +78,12 @@ PROBES=(
 That sentence is the point. `file mismatch on /og/home.png` makes you squint.
 *Shared links show the old preview image* makes you act.
 
-For things that ship with a build but never appear as a file — security headers,
-cache rules, redirects — use `HEADER_PROBES`.
+### Header probes are a weaker, different thing
+
+`HEADER_PROBES` check that a live response header contains a string. They never
+read the commit, so they cannot tell you which build is live — a year-old header
+still passes. Use them as a smoke test for config that ships with a build
+(security headers, cache rules, redirects), never as proof of a deploy.
 
 ## Test
 
@@ -86,8 +91,9 @@ cache rules, redirects — use `HEADER_PROBES`.
 bash test.sh
 ```
 
-Builds a throwaway repo, serves it, changes one byte, and checks that the script
-says the right thing four times. If that passes, it works.
+Builds a throwaway repo, serves it, breaks it seven different ways, and checks
+that the script says the right thing each time — including that an unreachable
+site is never called a bad deploy.
 
 ## Not yet
 

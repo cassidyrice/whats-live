@@ -58,4 +58,29 @@ out="$(bash "$HERE/whats-live.sh" "$TMP/dead.conf" 2>&1 && echo "EXIT0" || echo 
 [[ "$out" == *"EXIT2"* ]] || { echo "FAILED: expected exit 2"; echo "$out"; exit 1; }
 echo "    ok"
 
+echo "--- case 5: a header probe on an unreachable site is NOT a bad deploy (expect 2)"
+cat > "$TMP/hdr.conf" <<EOF
+SITE_ORIGIN="http://127.0.0.1:1"
+DEPLOY_COMMIT="$COMMIT"
+GIT_REPO="$TMP"
+PROBES=( "/hello.txt|public/hello.txt|nobody can read the greeting" )
+HEADER_PROBES=( "/|x-frame-options|DENY|clickjacking protection is gone" )
+EOF
+out="$(bash "$HERE/whats-live.sh" "$TMP/hdr.conf" 2>&1 && echo "EXIT0" || echo "EXIT$?")"
+[[ "$out" == *"EXIT2"* ]] || { echo "FAILED: expected exit 2, a dropped connection is not a mismatch"; echo "$out"; exit 1; }
+echo "    ok"
+
+echo "--- case 6: a probe path that is not in the commit (expect 2, not a crash)"
+sed 's|public/hello.txt|public/typo.txt|' "$TMP/t.conf" > "$TMP/bad.conf"
+out="$(bash "$HERE/whats-live.sh" "$TMP/bad.conf" 2>&1 && echo "EXIT0" || echo "EXIT$?")"
+[[ "$out" == *"EXIT2"* ]] || { echo "FAILED: expected exit 2, got: $out"; exit 1; }
+[[ "$out" == *"CONFIG"* ]] || { echo "FAILED: no CONFIG line"; exit 1; }
+echo "    ok"
+
+echo "--- case 7: a config with no probes must refuse, not print OK (expect 2)"
+printf 'SITE_ORIGIN="http://127.0.0.1:%s"\nDEPLOY_COMMIT="%s"\nGIT_REPO="%s"\n' "$PORT" "$COMMIT" "$TMP" > "$TMP/empty.conf"
+out="$(bash "$HERE/whats-live.sh" "$TMP/empty.conf" 2>&1 && echo "EXIT0" || echo "EXIT$?")"
+[[ "$out" == *"EXIT2"* ]] || { echo "FAILED: an empty config printed a green light"; echo "$out"; exit 1; }
+echo "    ok"
+
 echo "all passed"

@@ -53,6 +53,12 @@ if ! "${GIT[@]}" cat-file -e "${DEPLOY_COMMIT}^{commit}" 2>/dev/null; then
   exit 2
 fi
 
+if [[ -z "${PROBES[*]}" && -z "${HEADER_PROBES[*]}" ]]; then
+  red "no PROBES or HEADER_PROBES in $CONF — there is nothing to check."
+  red "An empty config would otherwise print OK without contacting the site at all."
+  exit 2
+fi
+
 echo "=========================================="
 echo " whats-live"
 echo " site:   $SITE_ORIGIN"
@@ -65,10 +71,15 @@ for probe in "${PROBES[@]}"; do
   IFS='|' read -r url_path repo_path breaks <<<"$probe"
   echo "→ $url_path"
 
-  want="$("${GIT[@]}" show "${DEPLOY_COMMIT}:${repo_path}" 2>/dev/null | sha256 | awk '{print $1}')"
+  if ! "${GIT[@]}" cat-file -e "${DEPLOY_COMMIT}:${repo_path}" 2>/dev/null; then
+    red "  CONFIG: ${repo_path} is not in ${DEPLOY_COMMIT:0:7}. Fix the path in your config."
+    inconclusive=1
+    continue
+  fi
+  want="$("${GIT[@]}" show "${DEPLOY_COMMIT}:${repo_path}" 2>/dev/null | sha256 | awk '{print $1}' || true)"
   if [[ -z "$want" || "$want" == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]]; then
-    red "  CONFIG: ${repo_path} is empty or missing in ${DEPLOY_COMMIT:0:7}. Pick a different probe."
-    fail=1
+    red "  CONFIG: ${repo_path} is empty in ${DEPLOY_COMMIT:0:7}. An empty file proves nothing — pick another probe."
+    inconclusive=1
     continue
   fi
 
@@ -79,7 +90,11 @@ for probe in "${PROBES[@]}"; do
     red "  UNREACHABLE — could not contact ${SITE_ORIGIN}"
     inconclusive=1
   elif [[ "$code" != "200" ]]; then
-    red "  FAIL: expected HTTP 200, got ${code} — this file is in ${DEPLOY_COMMIT:0:7}, so an older build is live."
+    if [[ "$code" == "404" || "$code" == "410" ]]; then
+      red "  FAIL: HTTP ${code} — this file is in ${DEPLOY_COMMIT:0:7}, so an older build is live."
+    else
+      red "  FAIL: HTTP ${code} — not the 200 we expected. The server answered, but not with this file."
+    fi
     [[ -n "${breaks:-}" ]] && red "  BREAKS: ${breaks}"
     fail=1
   else
@@ -101,6 +116,14 @@ for probe in "${HEADER_PROBES[@]}"; do
   [[ -n "$probe" ]] || continue
   IFS='|' read -r url_path header expected breaks <<<"$probe"
   echo "→ ${header} on ${url_path}"
+
+  hcode="$("${CURL[@]}" -I -o /dev/null -w '%{http_code}' "${SITE_ORIGIN}${url_path}" 2>/dev/null || true)"
+  hcode="${hcode: -3}"
+  if [[ -z "$hcode" || "$hcode" == "000" ]]; then
+    red "  UNREACHABLE — could not contact ${SITE_ORIGIN}"
+    inconclusive=1
+    continue
+  fi
 
   got="$("${CURL[@]}" -I "${SITE_ORIGIN}${url_path}" 2>/dev/null | grep -i "^${header}:" | tr -d '\r' || true)"
   if [[ -z "$got" ]]; then
