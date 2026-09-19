@@ -107,8 +107,8 @@ while IFS= read -r -d '' path; do
   esac
   qualifies "$path" || continue
   seen="${seen}|${path}|"
-  candidates+=("$(score_for "$path")	$(printf '%05d' "${#path}")	$path")
-done < <(git -C "$repo" diff-tree -r --root -m --first-parent --no-commit-id --name-only --diff-filter=ACMR -z "$commit")
+  candidates+=("$(score_for "$path")"$'\t'"$(printf '%05d' "${#path}")"$'\t'"$path")
+done < <(git -C "$repo" diff-tree -r --root -m --no-commit-id --name-only --diff-filter=ACMR -z "$commit")
 
 if [[ ${#candidates[@]} -eq 0 ]]; then
   short="$(git -C "$repo" rev-parse --short "$commit")"
@@ -121,9 +121,10 @@ fi
 
 echo "PROBES=("
 n=0
+TAB=$'\t'
 while IFS= read -r path; do
   [[ "$n" -ge 3 ]] && break
   printf '  "%s|%s|TODO"\n' "$(url_for "$path")" "$path"
   n=$((n + 1))
-done < <(printf '%s\n' "${candidates[@]}" | sort -t'	' -k1,1nr -k2,2nr -k3,3 | cut -f3-)
+done < <(printf '%s\n' "${candidates[@]}" | sort -t "$TAB" -k1,1nr -k2,2nr -k3,3 | cut -f3-)
 echo ")"

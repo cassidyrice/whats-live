@@ -63,7 +63,17 @@ anything under `public/`, `static/`, or your build output — work. Source files
 that get compiled on the way out (a `.tsx` page, a `.scss` file) do not: the repo
 bytes and the served bytes were never meant to match. If a commit only touched
 compiled sources there is nothing here to probe — deploy a tiny marker file next
-time (a `build.txt` holding the commit sha does it).
+time. Your host already knows the commit at build time and will hand it to you:
+
+| host | build env var |
+|---|---|
+| Cloudflare Pages | `CF_PAGES_COMMIT_SHA` |
+| Vercel | `VERCEL_GIT_COMMIT_SHA` |
+| Netlify | `COMMIT_REF` |
+
+Write it to a public file during the build — `echo "$CF_PAGES_COMMIT_SHA" >
+public/build.txt` — and probe that file. It changes every deploy by definition,
+which makes it the one probe that can never go stale.
 
 Two or three is plenty. Good ones: an image or asset added in that commit, a page
 whose text changed, a `.well-known` file. Each probe carries a plain sentence
@@ -98,7 +108,20 @@ site is never called a bad deploy.
 ## Not yet
 
 - Picking probes for you automatically from the commit diff
-- Reading the live version from a host's API (Cloudflare, Vercel, Netlify)
+
+## Deliberately not doing
+
+**Asking the host which commit is live.** Cloudflare Pages, Vercel and Netlify all
+know, and none of them will tell an anonymous visitor: no response header, no
+well-known path, no injected file. Every one requires an API token, which would
+cost this tool the thing that makes it easy to try — it needs nothing but `curl`
+and `git`.
+
+Beware the things that look like a commit and aren't: Cloudflare's
+`{8hex}.pages.dev` and Vercel's 9-character `*.vercel.app` hash are random
+deployment ids, `cf-ray` / `x-vercel-id` / `x-nf-request-id` are per-request ids,
+and an asset `ETag` is a content hash. None of them move with your git history.
+The marker file above is the honest way to get the same answer for free.
 
 ## Why it exists
 
