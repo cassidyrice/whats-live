@@ -62,18 +62,22 @@ git show --stat --name-only <commit>   # candidates
 anything under `public/`, `static/`, or your build output — work. Source files
 that get compiled on the way out (a `.tsx` page, a `.scss` file) do not: the repo
 bytes and the served bytes were never meant to match. If a commit only touched
-compiled sources there is nothing here to probe — deploy a tiny marker file next
-time. Your host already knows the commit at build time and will hand it to you:
+compiled sources there is nothing here to probe — write the sha yourself during
+your own build, and probe that file:
 
-| host | build env var |
-|---|---|
-| Cloudflare Pages | `CF_PAGES_COMMIT_SHA` |
-| Vercel | `VERCEL_GIT_COMMIT_SHA` |
-| Netlify | `COMMIT_REF` |
+```sh
+git rev-parse HEAD > public/build.txt
+```
 
-Write it to a public file during the build — `echo "$CF_PAGES_COMMIT_SHA" >
-public/build.txt` — and probe that file. It changes every deploy by definition,
-which makes it the one probe that can never go stale.
+It changes every deploy by definition, which makes it the one probe that can never
+go stale.
+
+If your **host** builds from git, it hands you the sha instead — `CF_PAGES_COMMIT_SHA`
+on Cloudflare Pages, `VERCEL_GIT_COMMIT_SHA` on Vercel, `COMMIT_REF` on Netlify. Note
+that in that case the host also knows your commit already, so its dashboard can
+usually answer the question without this tool at all. These variables are **not** set
+for direct-upload deploys, which is the case this tool was built for — there, use the
+`git rev-parse` line above.
 
 Two or three is plenty. Good ones: an image or asset added in that commit, a page
 whose text changed, a `.well-known` file. Each probe carries a plain sentence
