@@ -8,7 +8,6 @@ TMP="$(mktemp -d)"
 PORT="${PORT:-8749}"
 SRV=""
 trap '[[ -n "$SRV" ]] && kill "$SRV" 2>/dev/null; rm -rf "$TMP"' EXIT
-lsof -ti ":$PORT" >/dev/null 2>&1 && { echo "port $PORT is busy — set PORT=xxxx"; exit 1; }
 
 cd "$TMP"
 git init -q .
@@ -20,7 +19,13 @@ COMMIT="$(git rev-parse HEAD)"
 
 python3 -m http.server "$PORT" --directory "$TMP/public" >/dev/null 2>&1 &
 SRV=$!
-for _ in $(seq 20); do curl -sf "http://127.0.0.1:$PORT/hello.txt" >/dev/null && break; sleep 0.2; done
+ready=0
+for _ in $(seq 20); do
+  sleep 0.2
+  kill -0 "$SRV" 2>/dev/null || { echo "test server failed to start on port $PORT — it may be busy; set PORT=xxxx"; exit 1; }
+  if curl -sf "http://127.0.0.1:$PORT/hello.txt" >/dev/null; then ready=1; break; fi
+done
+[[ "$ready" -eq 1 ]] || { echo "test server did not become ready on port $PORT — check python3 and set PORT=xxxx if busy"; exit 1; }
 
 cat > "$TMP/t.conf" <<EOF
 SITE_ORIGIN="http://127.0.0.1:$PORT"

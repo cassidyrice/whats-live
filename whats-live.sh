@@ -26,9 +26,17 @@ red() { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 
-for tool in curl shasum git; do
+for tool in curl git; do
   command -v "$tool" >/dev/null || { red "$tool is required"; exit 2; }
 done
+
+if command -v sha256sum >/dev/null; then
+  sha256() { sha256sum; }
+elif command -v shasum >/dev/null; then
+  sha256() { shasum -a 256; }
+else
+  red "sha256sum or shasum is required"; exit 2
+fi
 
 CURL=(curl -sS --max-time 20 --retry 2 --retry-delay 2)
 GIT=(git -C "$GIT_REPO")
@@ -57,7 +65,7 @@ for probe in "${PROBES[@]}"; do
   IFS='|' read -r url_path repo_path breaks <<<"$probe"
   echo "→ $url_path"
 
-  want="$("${GIT[@]}" show "${DEPLOY_COMMIT}:${repo_path}" 2>/dev/null | shasum -a 256 | awk '{print $1}')"
+  want="$("${GIT[@]}" show "${DEPLOY_COMMIT}:${repo_path}" 2>/dev/null | sha256 | awk '{print $1}')"
   if [[ -z "$want" || "$want" == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]]; then
     red "  CONFIG: ${repo_path} is empty or missing in ${DEPLOY_COMMIT:0:7}. Pick a different probe."
     fail=1
@@ -75,7 +83,7 @@ for probe in "${PROBES[@]}"; do
     [[ -n "${breaks:-}" ]] && red "  BREAKS: ${breaks}"
     fail=1
   else
-    live="$("${CURL[@]}" "${SITE_ORIGIN}${url_path}" | shasum -a 256 | awk '{print $1}')"
+    live="$("${CURL[@]}" "${SITE_ORIGIN}${url_path}" | sha256 | awk '{print $1}')"
     if [[ "$live" == "$want" ]]; then
       green "  OK: matches the copy in ${DEPLOY_COMMIT:0:7}"
     else
